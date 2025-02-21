@@ -88,15 +88,16 @@ client.on('messageCreate', async (message) => {
 
             console.log('\n\n');
             console.log(`attachment found in ${message.url}`);
-            console.log(`attachment type: ${attachment.contentType}`);
-            console.log(`attachment size: ${attachment.size}`);
-            console.log(`attachment spoiler: ${attachment.spoiler}`);
-            console.log(`attachment proxyurl: ${attachment.proxyURL}`);
             // check if file is actually a video or not, if it isnt, dont bother using ffprobe on it
             if (!(attachment.contentType.includes('video'))) {
                 console.log('this attachment is not a video, ignoring');
                 return;
             }
+            console.log(`attachment type: ${attachment.contentType}`);
+            console.log(`attachment size: ${attachment.size}`);
+            console.log(`attachment spoiler: ${attachment.spoiler}`);
+            console.log(`attachment proxyurl: ${attachment.proxyURL}`);
+
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
             console.log('ffprobing to check codec...');
             const result = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${attachment.proxyURL}"`);
@@ -159,6 +160,22 @@ client.on('messageCreate', async (message) => {
                         break;
                 }
             }
+
+            console.log('\n\n');
+            console.log(`embed found in ${message.url}`);
+
+            // provider check, if its null that means the embedded link is a discord video
+            if (!(embed.provider == null)) {
+                console.log('embed is from a provider outside of discord, ignoring');
+                return;
+            }
+
+            // if its not a video embed, give up or else our code errors
+            if (!(embed.video)) {
+                console.log('this embed is not a video, ignoring');
+                return;
+            };
+
             // fetch embed proxyurl and grab needed information out of it
             const response = (await fetch(embed.video.proxyURL, { method: 'HEAD', redirect: 'manual' }));
             const contentsize = await response.headers.get('content-length');
@@ -167,22 +184,17 @@ client.on('messageCreate', async (message) => {
             const spoilerregex = /\|\|.*https?:\/\/.*\|\|/s;
             const hasspoiler = spoilerregex.test(message.content);
 
-            console.log('\n\n');
-            console.log(`embed found in ${message.url}`);
-            console.log(`embed type: ${contenttype}`);
-            console.log(`embed size: ${contentsize}`);
-            console.log(`embed spoiler: ${hasspoiler}`);
-            console.log(`embed proxyurl: ${embed.video.proxyURL}`);
-            // if its not a video embed, give up or else our code errors
-            if (!(embed.video)) {
-                console.log('this embed is not a video, ignoring');
-                return;
-            };
             // check if file is actually a video or not, if it isnt, dont bother using ffprobe on it
             if (!(contenttype.includes('video'))) {
                 console.log('this embed is not a video, ignoring');
                 return;
             }
+
+            console.log(`embed type: ${contenttype}`);
+            console.log(`embed size: ${contentsize}`);
+            console.log(`embed spoiler: ${hasspoiler}`);
+            console.log(`embed proxyurl: ${embed.video.proxyURL}`);
+
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
             console.log('ffprobing to check codec...');
             const result = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${embed.video.proxyURL}"`);
