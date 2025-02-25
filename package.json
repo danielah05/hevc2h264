@@ -1,14 +1,10 @@
 {
   "name": "hevc2h264",
   "version": "1.0.0",
-  "description": "",
+  "description": "a discord bot that automatically converts hevc videos to h264 for better compatibility",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "danielah05",
+  "license": "GPL-3.0-or-later",
   "type": "commonjs",
   "dependencies": {
     "discord.js": "^14.18.0"
