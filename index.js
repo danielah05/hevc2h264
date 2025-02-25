@@ -15,30 +15,7 @@ const execPromise = promisify(exec);
 
 // bot specific files
 const { token } = require('./config.json');
-
-// funny kernel string
-const kernelversion = '6.13.4.arch1-1';
-
-// silly statuses
-const customStatus = [
-    'still cleaning up the viruses that you had left',
-    'powered by ffmpeg',
-    'running on a i7-3770k',
-    'feel free to donate https://ko-fi.com/danielah05',
-    'written in x86 assembly',
-    'https://moonlight-mod.github.io/',
-    'try running steam in offline mode',
-    'number 1 #nerd-room fan',
-    'screaming in pain',
-    'if this bot is ever offline my pc/internet died or im playing fortnite',
-    'green is my pepper',
-    'plural systems rock <3',
-    'http://daniela.lol/',
-    'this status is 33 characters long',
-    'reiserfs: the last commit',
-    `running ${kernelversion}`,
-    'hevc 2ah',
-];
+const customStatus = require('./status.json');
 
 // bot boot message
 client.once(Events.ClientReady, readyClient => {
@@ -52,8 +29,8 @@ client.once(Events.ClientReady, readyClient => {
              still cleaning up the viruses that you had left\n
 logged in as ${readyClient.user.tag}`);
 
-    // clear left over videos in temp folder (in case something fucked up)
-    // execPromise('rm ./temp/*');
+    // create temp folder if it doesnt exist already
+    if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
 
     setInterval(() => {
         client.user.setActivity(customStatus[Math.floor(Math.random() * customStatus.length)], {
