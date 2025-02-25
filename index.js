@@ -1,6 +1,10 @@
 // require the necessary discord.js classes
 const { Client, Events, GatewayIntentBits, DiscordAPIError, ActivityType, PermissionsBitField } = require('discord.js');
 
+// require fs for file deletion
+const fs = require('fs');
+const fsPromises = fs.promises;
+
 // create a new client instance
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], allowedMentions: { repliedUser: false } });
 
@@ -90,7 +94,7 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoindex
         console.log(`success! replied converted video to message: ${message.url}`);
 
         // clean up
-        await execPromise(`rm ./temp/${videoname}`);
+        await fsPromises.rm(`./temp/${videoname}`);
     }
     else {
         console.log('not hevc, ignoring');
@@ -103,7 +107,6 @@ async function processVideo(videourl, message, video) {
     // currently uses crf 30, will probably remove eventually
     const result = await execPromise(`ffmpeg -y -i "${videourl}" -c:v h264 -crf 30 -c:a copy "./temp/${video}"`);
     if (result.stderr) {
-        // console.log(`ffmpeg log:\n${result.stderr}`);
         console.log('ffmpeg has finished');
     }
 }
@@ -159,7 +162,7 @@ client.on('messageCreate', async (message) => {
             if (e instanceof DiscordAPIError && e.code == 40005) {
                 await message.reply('bummer, the final converted video ended up being too big to post :(');
                 console.log(`failure! replied sad response to message: ${message.url}`);
-                await execPromise(`rm ./temp/${videoname}`);
+                await fsPromises.rm(`./temp/${videoname}`);
             }
             console.error(e);
         }
@@ -205,7 +208,7 @@ client.on('messageCreate', async (message) => {
             if (e instanceof DiscordAPIError && e.code == 40005) {
                 await message.reply('bummer, the final converted video ended up being too big to post :(');
                 console.log(`failure! replied sad response to message: ${message.url}`);
-                await execPromise(`rm ./temp/${videoname}`);
+                await fsPromises.rm(`./temp/${videoname}`);
             }
             console.error(e);
         }
