@@ -33,6 +33,9 @@ Create a `config.json` file in the root folder that is structured like this (wit
 
 Run `node .` in the root folder with your terminal to start running the bot.
 
+## Credits
+- [famfamfam-silk](https://github.com/legacy-icons/famfamfam-silk) - Icons
+
 ## Big thanks to my Ko-fi supporters!
 spaceashes<br>
 Dionicio3<br>

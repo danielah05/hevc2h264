@@ -56,18 +56,25 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoindex
     if (result.stdout.includes('hevc')) {
         if (contentsize > fileSize) {
             console.log('video is TOO big, lets fuck off');
-            await message.reply('this videos file size surpasses the maximum (non nitro) user file size limit, a conversion can unfortunately not be done :(');
-            console.log(`replied "white flag" to message: ${message.url}`);
+            // message react to indicate that the video is too big to try to convert
+            await message.react('<:exclamation:1348456255051661403>');
+            console.log(`reacted "white flag" to message: ${message.url}`);
             return;
         }
         console.log('a hevc video has hit the text channel');
+        // message react with cog to indicate the bot is processing video
+        await message.react('<:cog:1348456247510302780>');
         videoname = `${message.id}_h264_${videoindex}.mp4`;
         if (hasspoiler) {
             console.log('make video spoilered');
             videoname = `SPOILER_${message.id}_h264_${videoindex}.mp4`;
         }
         await processVideo(videourl, message, videoname);
-        await message.reply({ content: '<a:s_:1341653443462299700><a:u_:1341653473095057481><a:c_:1341653485812187179><a:c_:1341653485812187179><a:e_:1341653495585177600><a:s_:1341653443462299700><a:s_:1341653443462299700><a:exma_:1341653538178203710>', files: [`./temp/${videoname}`] });
+        // remove cog react and react with green tick to indicate conversion was successful
+        await message.reactions.cache.get('1348456247510302780').remove();
+        await message.react('<:tick:1348456270256144394>');
+        // await message.reply({ content: '<a:s_:1341653443462299700><a:u_:1341653473095057481><a:c_:1341653485812187179><a:c_:1341653485812187179><a:e_:1341653495585177600><a:s_:1341653443462299700><a:s_:1341653443462299700><a:exma_:1341653538178203710>', files: [`./temp/${videoname}`] });
+        await message.reply({ files: [`./temp/${videoname}`] });
         console.log(`success! replied converted video to message: ${message.url}`);
 
         // clean up
@@ -127,17 +134,19 @@ client.on('messageCreate', async (message) => {
             const hasspoiler = attachment.spoiler;
             console.log(`attachment size: ${attachment.size}`);
             console.log(`attachment spoiler: ${hasspoiler}`);
-            console.log(`attachment proxyurl: ${attachment.proxyURL}`);
+            console.log(`attachment url: ${attachment.url}`);
 
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(attachment.proxyURL, attachment.size, message, fileSize, videoindex, hasspoiler);
+            await ffprobeVideo(attachment.url, attachment.size, message, fileSize, videoindex, hasspoiler);
 
             videoindex++;
         }
         catch (e) {
             // final video is too big to post
             if (e instanceof DiscordAPIError && e.code == 40005) {
-                await message.reply('bummer, the final converted video ended up being too big to post :(');
+                // unreact cog and react with x to indicate bot failed to post video due to file size
+                await message.reactions.cache.get('1348456247510302780').remove();
+                await message.react('<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${message.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
             }
@@ -162,8 +171,8 @@ client.on('messageCreate', async (message) => {
                 return;
             };
 
-            // fetch embed proxyurl and grab needed information out of it
-            const response = (await fetch(embed.video.proxyURL, { method: 'HEAD', redirect: 'manual' }));
+            // fetch embed url and grab needed information out of it
+            const response = (await fetch(embed.video.url, { method: 'HEAD', redirect: 'manual' }));
             const contentsize = await response.headers.get('content-length');
             const contenttype = await response.headers.get('content-type');
             // check message with regex to check if final video should be spoilered or not
@@ -173,17 +182,19 @@ client.on('messageCreate', async (message) => {
             console.log(`embed type: ${contenttype}`);
             console.log(`embed size: ${contentsize}`);
             console.log(`embed spoiler: ${hasspoiler}`);
-            console.log(`embed proxyurl: ${embed.video.proxyURL}`);
+            console.log(`embed url: ${embed.video.url}`);
 
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(embed.video.proxyURL, contentsize, message, fileSize, videoindex, hasspoiler);
+            await ffprobeVideo(embed.video.url, contentsize, message, fileSize, videoindex, hasspoiler);
 
             videoindex++;
         }
         catch (e) {
             // final video is too big to post
             if (e instanceof DiscordAPIError && e.code == 40005) {
-                await message.reply('bummer, the final converted video ended up being too big to post :(');
+                // unreact cog and react with x to indicate bot failed to post video due to file size
+                await message.reactions.cache.get('1348456247510302780').remove();
+                await message.react('<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${message.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
             }
