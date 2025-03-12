@@ -17,6 +17,9 @@ const execPromise = promisify(exec);
 const { token } = require('./config.json');
 const customStatus = require('./status.json');
 
+let videoindex;
+let videoname;
+
 // bot boot message
 client.once(Events.ClientReady, readyClient => {
 	console.log(`
@@ -39,8 +42,95 @@ logged in as ${readyClient.user.tag}`);
     }, 60000);
 });
 
+// attachment checking code
+async function attachmentCheck(message, messageID, fileSize, videoIndex) {
+    for (const attachment of message.attachments.values()) {
+        try {
+            console.log('\n\n');
+            console.log(`attachment found in ${messageID.url}`);
+            console.log(`attachment type: ${attachment.contentType}`);
+            // check if file is actually a video or not, if it isnt, dont bother using ffprobe on it
+            if (attachment.contentType == null || !(attachment.contentType.includes('video'))) {
+                console.log('this attachment is not a video, ignoring');
+                return;
+            }
+            const hasspoiler = attachment.spoiler;
+            console.log(`attachment size: ${attachment.size}`);
+            console.log(`attachment spoiler: ${hasspoiler}`);
+            console.log(`attachment url: ${attachment.url}`);
+
+            // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
+            await ffprobeVideo(attachment.url, attachment.size, messageID, fileSize, videoIndex, hasspoiler);
+
+            videoIndex++;
+        }
+        catch (e) {
+            // final video is too big to post
+            if (e instanceof DiscordAPIError && e.code == 40005) {
+                // unreact cog and react with x to indicate bot failed to post video due to file size
+                await messageID.reactions.cache.get('1348456247510302780').remove();
+                await messageID.react('<:cancel:1348456236118573126>');
+                console.log(`failure! replied sad response to message: ${messageID.url}`);
+                await fsPromises.rm(`./temp/${videoname}`);
+            }
+            console.error(e);
+        }
+    }
+}
+
+// embed checking code
+async function embedCheck(message, messageID, fileSize, videoIndex) {
+    for (const embed of message.embeds) {
+        try {
+            console.log('\n\n');
+            console.log(`embed found in ${messageID.url}`);
+
+            // provider check, if its null that means the embedded link is a discord video
+            if (!(embed.provider == null)) {
+                console.log('embed is from a provider outside of discord, ignoring');
+                return;
+            }
+
+            // if its not a video embed, give up or else our code errors
+            if (!(embed.video)) {
+                console.log('this embed is not a video, ignoring');
+                return;
+            };
+
+            // fetch embed url and grab needed information out of it
+            const response = (await fetch(embed.video.url, { method: 'HEAD', redirect: 'manual' }));
+            const contentsize = await response.headers.get('content-length');
+            const contenttype = await response.headers.get('content-type');
+            // check message with regex to check if final video should be spoilered or not
+            const spoilerregex = /\|\|.*https?:\/\/.*\|\|/s;
+            const hasspoiler = spoilerregex.test(messageID.content);
+
+            console.log(`embed type: ${contenttype}`);
+            console.log(`embed size: ${contentsize}`);
+            console.log(`embed spoiler: ${hasspoiler}`);
+            console.log(`embed url: ${embed.video.url}`);
+
+            // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
+            await ffprobeVideo(embed.video.url, contentsize, messageID, fileSize, videoIndex, hasspoiler);
+
+            videoIndex++;
+        }
+        catch (e) {
+            // final video is too big to post
+            if (e instanceof DiscordAPIError && e.code == 40005) {
+                // unreact cog and react with x to indicate bot failed to post video due to file size
+                await message.reactions.cache.get('1348456247510302780').remove();
+                await message.react('<:cancel:1348456236118573126>');
+                console.log(`failure! replied sad response to message: ${message.url}`);
+                await fsPromises.rm(`./temp/${videoname}`);
+            }
+            console.error(e);
+        }
+    }
+}
+
 // ffprobe code
-async function ffprobeVideo(videourl, contentsize, message, fileSize, videoindex, hasspoiler) {
+async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex, hasspoiler) {
     // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
     console.log('ffprobing to check codec...');
     const result = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${videourl}"`);
@@ -64,10 +154,10 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoindex
         console.log('a hevc video has hit the text channel');
         // message react with cog to indicate the bot is processing video
         await message.react('<:cog:1348456247510302780>');
-        videoname = `${message.id}_h264_${videoindex}.mp4`;
+        videoname = `${message.id}_h264_${videoIndex}.mp4`;
         if (hasspoiler) {
             console.log('make video spoilered');
-            videoname = `SPOILER_${message.id}_h264_${videoindex}.mp4`;
+            videoname = `SPOILER_${message.id}_h264_${videoIndex}.mp4`;
         }
         await processVideo(videourl, message, videoname);
         // remove cog react and react with green tick to indicate conversion was successful
@@ -103,8 +193,8 @@ client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
     // video index number and video name
-    let videoindex = 0;
-    let videoname;
+    videoindex = 0;
+    videoname = '';
 
     // discord bots are restricted by the same file size upload limitation as regular users (10mb)
     let fileSize = 10485670;
@@ -120,90 +210,26 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // video detection code (attachments)
-    for (const attachment of message.attachments.values()) {
+    // timeout here, embeds fucking suck and theres a race condition pretty much which causes the bot to miss embeds sometimes, so we just wait 3 seconds (yes i know, thats a lot, but sometimes embeds take a bit) because i dont know how else to fix this
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    // video detection (attachments)
+    attachmentCheck(message, message, fileSize, videoindex);
+    // video detection (embeds)
+    embedCheck(message, message, fileSize, videoindex);
+
+    // forwarded message
+    for (const snapshot of message.messageSnapshots.values()) {
         try {
-            console.log('\n\n');
-            console.log(`attachment found in ${message.url}`);
-            console.log(`attachment type: ${attachment.contentType}`);
-            // check if file is actually a video or not, if it isnt, dont bother using ffprobe on it
-            if (attachment.contentType == null || !(attachment.contentType.includes('video'))) {
-                console.log('this attachment is not a video, ignoring');
-                return;
-            }
-            const hasspoiler = attachment.spoiler;
-            console.log(`attachment size: ${attachment.size}`);
-            console.log(`attachment spoiler: ${hasspoiler}`);
-            console.log(`attachment url: ${attachment.url}`);
-
-            // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(attachment.url, attachment.size, message, fileSize, videoindex, hasspoiler);
-
-            videoindex++;
+            // video detection (attachments)
+            attachmentCheck(snapshot, message, fileSize, videoindex);
+            // video detection (embeds)
+            embedCheck(snapshot, message, fileSize, videoindex);
         }
         catch (e) {
-            // final video is too big to post
-            if (e instanceof DiscordAPIError && e.code == 40005) {
-                // unreact cog and react with x to indicate bot failed to post video due to file size
-                await message.reactions.cache.get('1348456247510302780').remove();
-                await message.react('<:cancel:1348456236118573126>');
-                console.log(`failure! replied sad response to message: ${message.url}`);
-                await fsPromises.rm(`./temp/${videoname}`);
-            }
             console.error(e);
         }
     }
 
-    // video detection code (embeds)
-    // timeout here, embeds fucking suck and theres a race condition pretty much which causes the bot to miss embeds sometimes, so we just wait 5 seconds (yes i know, thats a lot, but sometimes embeds take a bit) because i dont know how else to fix this
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    for (const embed of message.embeds) {
-        try {
-            console.log('\n\n');
-            console.log(`embed found in ${message.url}`);
-
-            // provider check, if its null that means the embedded link is a discord video
-            if (!(embed.provider == null)) {
-                console.log('embed is from a provider outside of discord, ignoring');
-                return;
-            }
-
-            // if its not a video embed, give up or else our code errors
-            if (!(embed.video)) {
-                console.log('this embed is not a video, ignoring');
-                return;
-            };
-
-            // fetch embed url and grab needed information out of it
-            const response = (await fetch(embed.video.url, { method: 'HEAD', redirect: 'manual' }));
-            const contentsize = await response.headers.get('content-length');
-            const contenttype = await response.headers.get('content-type');
-            // check message with regex to check if final video should be spoilered or not
-            const spoilerregex = /\|\|.*https?:\/\/.*\|\|/s;
-            const hasspoiler = spoilerregex.test(message.content);
-
-            console.log(`embed type: ${contenttype}`);
-            console.log(`embed size: ${contentsize}`);
-            console.log(`embed spoiler: ${hasspoiler}`);
-            console.log(`embed url: ${embed.video.url}`);
-
-            // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(embed.video.url, contentsize, message, fileSize, videoindex, hasspoiler);
-
-            videoindex++;
-        }
-        catch (e) {
-            // final video is too big to post
-            if (e instanceof DiscordAPIError && e.code == 40005) {
-                // unreact cog and react with x to indicate bot failed to post video due to file size
-                await message.reactions.cache.get('1348456247510302780').remove();
-                await message.react('<:cancel:1348456236118573126>');
-                console.log(`failure! replied sad response to message: ${message.url}`);
-                await fsPromises.rm(`./temp/${videoname}`);
-            }
-            console.error(e);
-        }
-    }
 });
 
 // log in with bot token
