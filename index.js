@@ -153,7 +153,10 @@ client.on('messageCreate', async (message) => {
             console.error(e);
         }
     }
+
     // video detection code (embeds)
+    // timeout here, embeds fucking suck and theres a race condition pretty much which causes the bot to miss embeds sometimes, so we just wait 5 seconds (yes i know, thats a lot, but sometimes embeds take a bit) because i dont know how else to fix this
+    await new Promise(resolve => setTimeout(resolve, 5000));
     for (const embed of message.embeds) {
         try {
             console.log('\n\n');
