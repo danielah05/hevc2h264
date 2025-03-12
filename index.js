@@ -17,6 +17,7 @@ const execPromise = promisify(exec);
 const { token } = require('./config.json');
 const customStatus = require('./status.json');
 
+// video file specific stuff
 let videoindex;
 let videoname;
 
