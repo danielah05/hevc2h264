@@ -74,6 +74,11 @@ async function attachmentCheck(message, messageID, fileSize, videoIndex) {
                 console.log(`failure! replied sad response to message: ${messageID.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
             }
+            // message no longer exists after video was processed
+            else if (e instanceof DiscordAPIError && e.code == 10008) {
+                console.log('the message was deleted before we could do anything :/, cleaning up');
+                if (fs.existsSync(`./temp/${videoname}`)) await fsPromises.rm(`./temp/${videoname}`);
+            }
             console.error(e);
         }
     }
@@ -124,6 +129,11 @@ async function embedCheck(message, messageID, fileSize, videoIndex) {
                 await message.react('<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${message.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
+            }
+            // message no longer exists after video was processed
+            else if (e instanceof DiscordAPIError && e.code == 10008) {
+                console.log('the message was deleted before we could do anything :/, cleaning up');
+                if (fs.existsSync(`./temp/${videoname}`)) await fsPromises.rm(`./temp/${videoname}`);
             }
             console.error(e);
         }
