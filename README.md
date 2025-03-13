@@ -1,6 +1,8 @@
 # hevc2h264
 A Discord Bot that automatically converts HEVC videos to H264 for better compatibility.
 
+<img src="./preview/hevc2h264_example.webp" alt="Video of the bot converting a posted HEVC video to H264" width="400"/>
+
 ## What's the point?
 Yes, I know, the bot instantly sounds pointless and useless, but there is a really good reason why I ended up making this however.
 
