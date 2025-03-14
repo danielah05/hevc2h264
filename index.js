@@ -69,7 +69,7 @@ async function attachmentCheck(message, messageID, fileSize, videoIndex) {
             // final video is too big to post
             if (e instanceof DiscordAPIError && e.code == 40005) {
                 // unreact cog and react with x to indicate bot failed to post video due to file size
-                await messageID.reactions.cache.get('1348456247510302780').remove();
+                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await messageID.reactions.cache.get('1348456247510302780').remove();
                 await messageID.react('<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${messageID.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
@@ -125,8 +125,8 @@ async function embedCheck(message, messageID, fileSize, videoIndex) {
             // final video is too big to post
             if (e instanceof DiscordAPIError && e.code == 40005) {
                 // unreact cog and react with x to indicate bot failed to post video due to file size
-                await message.reactions.cache.get('1348456247510302780').remove();
-                await message.react('<:cancel:1348456236118573126>');
+                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await message.reactions.cache.get('1348456247510302780').remove();
+                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${message.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
             }
@@ -158,13 +158,13 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
         if (contentsize > fileSize) {
             console.log('video is TOO big, lets fuck off');
             // message react to indicate that the video is too big to try to convert
-            await message.react('<:exclamation:1348456255051661403>');
+            if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:exclamation:1348456255051661403>');
             console.log(`reacted "white flag" to message: ${message.url}`);
             return;
         }
         console.log('a hevc video has hit the text channel');
         // message react with cog to indicate the bot is processing video
-        await message.react('<:cog:1348456247510302780>');
+        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:cog:1348456247510302780>');
         videoname = `${message.id}_h264_${videoIndex}.mp4`;
         if (hasspoiler) {
             console.log('make video spoilered');
@@ -172,8 +172,8 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
         }
         await processVideo(videourl, message, videoname);
         // remove cog react and react with green tick to indicate conversion was successful
-        await message.reactions.cache.get('1348456247510302780').remove();
-        await message.react('<:tick:1348456270256144394>');
+        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await message.reactions.cache.get('1348456247510302780').remove();
+        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:tick:1348456270256144394>');
         // await message.reply({ content: '<a:s_:1341653443462299700><a:u_:1341653473095057481><a:c_:1341653485812187179><a:c_:1341653485812187179><a:e_:1341653495585177600><a:s_:1341653443462299700><a:s_:1341653443462299700><a:exma_:1341653538178203710>', files: [`./temp/${videoname}`] });
         await message.reply({ files: [`./temp/${videoname}`] });
         console.log(`success! replied converted video to message: ${message.url}`);
