@@ -18,8 +18,8 @@ const { token } = require('./config.json');
 const customStatus = require('./status.json');
 
 // video file specific stuff
-let videoindex;
-let videoname;
+const videoindex = 0;
+let videoname = '';
 
 // bot boot message
 client.once(Events.ClientReady, readyClient => {
@@ -202,10 +202,6 @@ client.on('messageCreate', async (message) => {
     if (!(message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.SendMessages))) return;
     // avoid reading videos posted by the bot
     if (message.author.bot) return;
-
-    // video index number and video name
-    videoindex = 0;
-    videoname = '';
 
     // discord bots are restricted by the same file size upload limitation as regular users (10mb)
     let fileSize = 10485670;
