@@ -1,12 +1,12 @@
 // require the necessary discord.js classes
-const { Client, Events, GatewayIntentBits, DiscordAPIError, ActivityType, PermissionsBitField } = require('discord.js');
+const { Client, Events, GatewayIntentBits, DiscordAPIError, ActivityType, PermissionsBitField, Partials } = require('discord.js');
 
 // require fs for file deletion
 const fs = require('fs');
 const fsPromises = fs.promises;
 
 // create a new client instance
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent], allowedMentions: { repliedUser: false } });
+const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.DirectMessages], allowedMentions: { repliedUser: false }, partials: [ Partials.Channel, Partials.Message ] });
 
 // scary exec zone
 const { promisify } = require('node:util');
@@ -43,6 +43,24 @@ logged in as ${readyClient.user.tag}`);
     }, 60000);
 });
 
+// add reaction
+async function addReact(message, messageID, reactionID) {
+    if (message.guild) {
+        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await messageID.react(reactionID);
+    }
+    else {
+        await messageID.react(reactionID);
+    }
+}
+
+// remove reaction
+async function removeReact(message, messageID, reactionID) {
+    // i do not think it is possible to remove reacts in a dm, i might be wrong on that but for now we only remove reacts in servers if we have permission
+    if (message.guild) {
+        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await messageID.reactions.cache.get(reactionID).remove();
+    }
+}
+
 // attachment checking code
 async function attachmentCheck(message, messageID, fileSize, videoIndex) {
     for (const attachment of message.attachments.values()) {
@@ -69,8 +87,8 @@ async function attachmentCheck(message, messageID, fileSize, videoIndex) {
             // final video is too big to post
             if (e instanceof DiscordAPIError && e.code == 40005) {
                 // unreact cog and react with x to indicate bot failed to post video due to file size
-                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await messageID.reactions.cache.get('1348456247510302780').remove();
-                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await messageID.react('<:cancel:1348456236118573126>');
+                await removeReact(message, messageID, '1348456247510302780');
+                await addReact(message, messageID, '<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${messageID.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
             }
@@ -125,8 +143,8 @@ async function embedCheck(message, messageID, fileSize, videoIndex) {
             // final video is too big to post
             if (e instanceof DiscordAPIError && e.code == 40005) {
                 // unreact cog and react with x to indicate bot failed to post video due to file size
-                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await message.reactions.cache.get('1348456247510302780').remove();
-                if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:cancel:1348456236118573126>');
+                await removeReact(message, message, '1348456247510302780');
+                await addReact(message, message, '<:cancel:1348456236118573126>');
                 console.log(`failure! replied sad response to message: ${message.url}`);
                 await fsPromises.rm(`./temp/${videoname}`);
             }
@@ -158,13 +176,13 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
         if (contentsize > fileSize) {
             console.log('video is TOO big, lets fuck off');
             // message react to indicate that the video is too big to try to convert
-            if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:exclamation:1348456255051661403>');
+            await addReact(message, message, '<:exclamation:1348456255051661403>');
             console.log(`reacted "white flag" to message: ${message.url}`);
             return;
         }
         console.log('a hevc video has hit the text channel');
         // message react with cog to indicate the bot is processing video
-        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:cog:1348456247510302780>');
+        addReact(message, message, '<:cog:1348456247510302780>');
         videoname = `${message.id}_h264_${videoIndex}.mp4`;
         if (hasspoiler) {
             console.log('make video spoilered');
@@ -172,8 +190,8 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
         }
         await processVideo(videourl, message, videoname);
         // remove cog react and react with green tick to indicate conversion was successful
-        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.ManageMessages)) await message.reactions.cache.get('1348456247510302780').remove();
-        if (message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.AddReactions)) await message.react('<:tick:1348456270256144394>');
+        removeReact(message, message, '1348456247510302780');
+        addReact(message, message, '<:tick:1348456270256144394>');
         await message.reply({ files: [`./temp/${videoname}`] });
         console.log(`success! replied converted video to message: ${message.url}`);
 
@@ -197,15 +215,17 @@ async function processVideo(videourl, message, video) {
 
 // detect when a new message is posted and check if it has a video attached
 client.on('messageCreate', async (message) => {
-    // check channel permission to see if we can send anything
-    if (!(message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.SendMessages))) return;
     // avoid reading videos posted by the bot
     if (message.author.bot) return;
 
     // discord bots are restricted by the same file size upload limitation as regular users (10mb)
     let fileSize = 10485670;
-    // this code is to detect the current discord servers boost level, if its 2 or 3 we can work with higher file sizes (50mb, 100mb)
+
     if (message.guild) {
+        // check channel permission to see if we can send anything
+        if (!(message.channel.permissionsFor(client.user).has(PermissionsBitField.Flags.SendMessages))) return;
+
+        // this code is to detect the current discord servers boost level, if its 2 or 3 we can work with higher file sizes (50mb, 100mb)
         switch (message.guild.premiumTier) {
             case 2:
                 fileSize = 52428800;
