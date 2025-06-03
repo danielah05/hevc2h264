@@ -23,6 +23,7 @@ let videoname = '';
 
 // bot boot message
 client.once(Events.ClientReady, readyClient => {
+    const date = new Date();
 	console.log(`
 ██╗  ██╗███████╗██╗   ██╗ ██████╗██████╗ ██╗  ██╗██████╗  ██████╗ ██╗  ██╗
 ██║  ██║██╔════╝██║   ██║██╔════╝╚════██╗██║  ██║╚════██╗██╔════╝ ██║  ██║
@@ -36,11 +37,19 @@ logged in as ${readyClient.user.tag}`);
     // create temp folder if it doesnt exist already
     if (!fs.existsSync('./temp')) fs.mkdirSync('./temp');
 
-    setInterval(() => {
-        client.user.setActivity(customStatus[Math.floor(Math.random() * customStatus.length)], {
-            type: ActivityType.Custom,
-        });
-    }, 60000);
+    if (date.getMonth() == 5) {
+        client.user.setActivity('happy pride month ❤️🏳️‍🌈🏳️‍⚧️', { type: ActivityType.Custom });
+    }
+    else if (date.getMonth() == 4 && date.getDay() == 23) {
+        client.user.setActivity('happy schizophrenia awarness day ❤️', { type: ActivityType.Custom });
+    }
+    else {
+        setInterval(() => {
+            client.user.setActivity(customStatus[Math.floor(Math.random() * customStatus.length)], {
+                type: ActivityType.Custom,
+            });
+        }, 60000);
+    }
 });
 
 // add reaction
@@ -62,7 +71,7 @@ async function removeReact(message, messageID, reactionID) {
 }
 
 // attachment checking code
-async function attachmentCheck(message, messageID, fileSize, videoIndex) {
+async function attachmentCheck(message, messageID, fileSize, videoIndex, doForce) {
     for (const attachment of message.attachments.values()) {
         try {
             console.log('\n\n');
@@ -79,7 +88,7 @@ async function attachmentCheck(message, messageID, fileSize, videoIndex) {
             console.log(`attachment url: ${attachment.url}`);
 
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(attachment.url, attachment.size, messageID, fileSize, videoIndex, hasspoiler);
+            await ffprobeVideo(attachment.url, attachment.size, attachment.contentType, messageID, fileSize, videoIndex, hasspoiler, doForce);
 
             videoIndex++;
         }
@@ -103,7 +112,7 @@ async function attachmentCheck(message, messageID, fileSize, videoIndex) {
 }
 
 // embed checking code
-async function embedCheck(message, messageID, fileSize, videoIndex) {
+async function embedCheck(message, messageID, fileSize, videoIndex, doForce) {
     for (const embed of message.embeds) {
         try {
             console.log('\n\n');
@@ -135,7 +144,7 @@ async function embedCheck(message, messageID, fileSize, videoIndex) {
             console.log(`embed url: ${embed.video.url}`);
 
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(embed.video.url, contentsize, messageID, fileSize, videoIndex, hasspoiler);
+            await ffprobeVideo(embed.video.url, contentsize, contenttype, messageID, fileSize, videoIndex, hasspoiler, doForce);
 
             videoIndex++;
         }
@@ -159,7 +168,7 @@ async function embedCheck(message, messageID, fileSize, videoIndex) {
 }
 
 // ffprobe code
-async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex, hasspoiler) {
+async function ffprobeVideo(videourl, contentsize, contenttype, message, fileSize, videoIndex, hasspoiler, doForce) {
     // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
     console.log('ffprobing to check codec...');
     const result = await execPromise(`ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "${videourl}"`);
@@ -171,8 +180,16 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
         console.log(`stderr: ${result.stderr}`);
         return;
     }
-    // video is hevc? time to do some ffmpeg magic
-    if (result.stdout.includes('hevc')) {
+
+    // ik the entire point is to force convert, but also doing this would just be insanely silly and a waste of processing power
+    if (contenttype.includes('mp4') && result.stdout.includes('h264') && doForce) {
+        console.log('>using force on an mp4 h264 video');
+        await message.reply({ files: ['./assets/kind message from daniela.mp3'] });
+        return;
+    }
+
+    // video is hevc? (or we are force converting?) time to do some ffmpeg magic
+    if (result.stdout.includes('hevc') || doForce) {
         if (contentsize > fileSize) {
             console.log('video is TOO big, lets fuck off');
             // message react to indicate that the video is too big to try to convert
@@ -188,7 +205,7 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
             console.log('make video spoilered');
             videoname = `SPOILER_${message.id}_h264_${videoIndex}.mp4`;
         }
-        await processVideo(videourl, message, videoname);
+        await processVideo(videourl, videoname);
         // remove cog react and react with green tick to indicate conversion was successful
         removeReact(message, message, '1348456247510302780');
         addReact(message, message, '<:tick:1348456270256144394>');
@@ -204,7 +221,7 @@ async function ffprobeVideo(videourl, contentsize, message, fileSize, videoIndex
 }
 
 // process video code
-async function processVideo(videourl, message, video) {
+async function processVideo(videourl, video) {
     console.log('do fancy video conversion stuff');
     // currently uses crf 30, will probably remove eventually
     const result = await execPromise(`ffmpeg -y -i "${videourl}" -c:v h264 -crf 30 -c:a copy "./temp/${video}"`);
@@ -236,26 +253,60 @@ client.on('messageCreate', async (message) => {
         }
     }
 
+    // message command to force convert videos
+    if (message.content == '^force') {
+        console.log('\n\n');
+        console.log(`force command used in ${message.url}`);
+
+        // wrap this in a "try catch" cuz the way u fetch message stuff can cause errors
+        try {
+            // if a video was found all of this should execute fine
+            const repliedTo = await message.channel.messages.fetch(message.reference.messageId);
+
+            attachmentCheck(repliedTo, repliedTo, fileSize, videoindex, true);
+            embedCheck(repliedTo, repliedTo, fileSize, videoindex, true);
+
+            // forwarded message
+            for (const snapshot of repliedTo.messageSnapshots.values()) {
+                try {
+                    // video detection (attachments)
+                    attachmentCheck(snapshot, repliedTo, fileSize, videoindex, true);
+                    // video detection (embeds)
+                    embedCheck(snapshot, repliedTo, fileSize, videoindex, true);
+                }
+                catch (e) {
+                    console.error(e);
+                }
+            }
+            return;
+        }
+        catch {
+            // nothing was found
+            console.log('message was not replying to anything LOL');
+            await message.reply('no video found, please reply to the video u want to forcefully convert by right clicking on the message, clicking reply and then send the command again');
+            return;
+        }
+    }
+
     // timeout here, embeds fucking suck and theres a race condition pretty much which causes the bot to miss embeds sometimes, so we just wait 3 seconds (yes i know, thats a lot, but sometimes embeds take a bit) because i dont know how else to fix this
     await new Promise(resolve => setTimeout(resolve, 3000));
     // video detection (attachments)
-    attachmentCheck(message, message, fileSize, videoindex);
+    attachmentCheck(message, message, fileSize, videoindex, false);
     // video detection (embeds)
-    embedCheck(message, message, fileSize, videoindex);
+    embedCheck(message, message, fileSize, videoindex, false);
 
     // forwarded message
     for (const snapshot of message.messageSnapshots.values()) {
         try {
             // video detection (attachments)
-            attachmentCheck(snapshot, message, fileSize, videoindex);
+            attachmentCheck(snapshot, message, fileSize, videoindex, false);
             // video detection (embeds)
-            embedCheck(snapshot, message, fileSize, videoindex);
+            embedCheck(snapshot, message, fileSize, videoindex, false);
         }
         catch (e) {
             console.error(e);
         }
     }
-
 });
 
 // log in with bot token
