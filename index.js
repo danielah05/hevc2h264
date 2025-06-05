@@ -131,7 +131,7 @@ async function embedCheck(message, messageID, fileSize, videoIndex, doForce) {
             };
 
             // fetch embed url and grab needed information out of it
-            const response = (await fetch(embed.video.url, { method: 'HEAD', redirect: 'manual' }));
+            const response = (await fetch(embed.video.proxyURL, { method: 'HEAD', redirect: 'manual' }));
             const contentsize = await response.headers.get('content-length');
             const contenttype = await response.headers.get('content-type');
             // check message with regex to check if final video should be spoilered or not
@@ -141,10 +141,10 @@ async function embedCheck(message, messageID, fileSize, videoIndex, doForce) {
             console.log(`embed type: ${contenttype}`);
             console.log(`embed size: ${contentsize}`);
             console.log(`embed spoiler: ${hasspoiler}`);
-            console.log(`embed url: ${embed.video.url}`);
+            console.log(`embed url: ${embed.video.proxyURL}`);
 
             // ffprobe command to check if a video is hevc or not, if it isnt dont bother with video processing
-            await ffprobeVideo(embed.video.url, contentsize, contenttype, messageID, fileSize, videoIndex, hasspoiler, doForce);
+            await ffprobeVideo(embed.video.proxyURL, contentsize, contenttype, messageID, fileSize, videoIndex, hasspoiler, doForce);
 
             videoIndex++;
         }
